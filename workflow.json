@@ -1,0 +1,218 @@
+{
+  "name": "Task Escalation Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cron",
+              "cronExpression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "92e50b3d-a6b7-4a88-85bd-23f3b60cac52",
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/home/hatch/workspace/automation-build-2/06-n8n-Task-Escalation-Flow/escalation-log.csv"
+      },
+      "id": "e838b026-90dc-4263-a502-72dcbcf2f5e3",
+      "name": "Read Escalation Log",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        420,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "binaryPropertyName": "data"
+      },
+      "id": "1ea38562-d05e-4888-a5dc-76002f35ef71",
+      "name": "Extract Log CSV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/home/hatch/workspace/automation-build-2/06-n8n-Task-Escalation-Flow/tasks.csv"
+      },
+      "id": "84dc866b-1628-4e88-a2a1-576138b0fd9c",
+      "name": "Read Tasks CSV",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "binaryPropertyName": "data"
+      },
+      "id": "168809c3-6acc-4eb9-abc2-bac17be9fa4f",
+      "name": "Extract Tasks CSV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Task Escalation Flow \u2014 classify tasks, build markdown report + idempotent CSV log\nconst todayStr = new Date().toISOString().slice(0, 10);\nconst today = new Date(todayStr + 'T00:00:00');\nconst dayMs = 86400000;\n\nfunction parseDate(s) {\n  const d = new Date(String(s).trim() + 'T00:00:00');\n  return isNaN(d) ? null : d;\n}\n\nlet tasks = [];\ntry {\n  tasks = $('Extract Tasks CSV').all().map(i => i.json).filter(r => r && r.task_id);\n} catch (e) { tasks = []; }\n\nlet existingLog = [];\ntry {\n  existingLog = $('Extract Log CSV').all().map(i => i.json).filter(r => r && r.task_id && r.date);\n} catch (e) { existingLog = []; }\nconst loggedKeys = new Set(existingLog.map(r => r.task_id + '|' + r.date));\n\nconst SKIP = new Set(['done', 'cancelled']);\nconst flagged = [];\n\nfor (const t of tasks) {\n  const status = String(t.status || '').trim().toLowerCase();\n  if (SKIP.has(status)) continue;\n  const due = parseDate(t.due_date || '');\n  if (!due) continue;\n  const diffDays = Math.round((due - today) / dayMs);\n  const overdueDays = diffDays < 0 ? -diffDays : 0;\n  const blocks = String(t.blocks_milestone || '').trim().toLowerCase() === 'yes';\n\n  let category = null, severity = null;\n  if (overdueDays > 7 || blocks)      { category = 'Overdue';      severity = 'Critical'; }\n  else if (overdueDays > 0)           { category = 'Overdue';      severity = 'High';     }\n  else if (diffDays <= 2)             { category = 'Due in 48h';   severity = 'Medium';   }\n  else if (diffDays <= 7)             { category = 'Due this week';severity = 'Medium';   }\n  if (!category) continue;\n\n  flagged.push({\n    task_id: String(t.task_id), title: String(t.title || ''), owner: String(t.owner || ''),\n    status: String(t.status || ''), due_date: String(t.due_date || ''),\n    blocks_milestone: String(t.blocks_milestone || ''),\n    category, severity, overdue_days: overdueDays\n  });\n}\n\nconst rank = { Critical: 0, High: 1, Medium: 2 };\nflagged.sort((a, b) =>\n  (rank[a.severity] - rank[b.severity]) ||\n  (b.overdue_days - a.overdue_days) ||\n  (a.task_id < b.task_id ? -1 : 1));\n\nconst counts = { Critical: 0, High: 0, Medium: 0 };\nfor (const f of flagged) counts[f.severity]++;\n\nlet md = '# Task Escalation Report \u2014 ' + todayStr + '\\n\\n';\nmd += '**Generated:** ' + todayStr + ' \u00b7 **Tasks scanned:** ' + tasks.length +\n      ' \u00b7 **Flagged:** ' + flagged.length + '\\n\\n';\nmd += '| Severity | Count |\\n|---|---|\\n';\nfor (const s of ['Critical', 'High', 'Medium']) md += '| ' + s + ' | ' + counts[s] + ' |\\n';\nmd += '\\n## Flagged tasks\\n\\n';\nmd += '| ID | Title | Owner | Due | Status | Category | Severity | Overdue (d) |\\n';\nmd += '|---|---|---|---|---|---|---|---|\\n';\nfor (const f of flagged) {\n  md += '| ' + f.task_id + ' | ' + f.title + ' | ' + f.owner + ' | ' + f.due_date +\n        ' | ' + f.status + ' | ' + f.category + ' | **' + f.severity + '** | ' +\n        f.overdue_days + ' |\\n';\n}\nmd += '\\n_Severity rules: Critical = overdue > 7 days or blocks a milestone \u00b7 ' +\n      'High = overdue \u2264 7 days \u00b7 Medium = due within 48h / this week. ' +\n      'Done & Cancelled tasks are excluded._\\n';\n\nconst newRows = flagged.filter(f => !loggedKeys.has(f.task_id + '|' + todayStr));\nconst q = v => '\"' + String(v ?? '').replace(/\"/g, '\"\"') + '\"';\nconst header = 'task_id,date,title,owner,due_date,status,category,severity,overdue_days\\n';\nlet csv = header;\nfor (const r of existingLog) {\n  csv += [r.task_id, r.date, r.title, r.owner, r.due_date, r.status,\n          r.category, r.severity, r.overdue_days].map(q).join(',') + '\\n';\n}\nfor (const f of newRows) {\n  csv += [f.task_id, todayStr, f.title, f.owner, f.due_date, f.status,\n          f.category, f.severity, f.overdue_days].map(q).join(',') + '\\n';\n}\n\n// Convert to binary for the Write nodes\nfunction toBinary(text, fileName, mimeType) {\n  return {\n    data: Buffer.from(text, 'utf8').toString('base64'),\n    mimeType: mimeType,\n    fileName: fileName\n  };\n}\nconst reportFile = 'escalation-report-' + todayStr + '.md';\nreturn [\n  {\n    json: {\n      report_name: reportFile,\n      report_date: todayStr,\n      tasks_scanned: tasks.length,\n      flagged: flagged.length,\n      new_log_rows: newRows.length,\n      critical: counts.Critical, high: counts.High, medium: counts.Medium\n    },\n    binary: {\n      report: toBinary(md, reportFile, 'text/markdown'),\n      log: toBinary(csv, 'escalation-log.csv', 'text/csv')\n    }\n  }\n];\n"
+      },
+      "id": "3fe85d34-47a1-4cc1-9464-0e74cf569965",
+      "name": "Classify & Build Outputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/hatch/workspace/automation-build-2/06-n8n-Task-Escalation-Flow/{{ $binary.report.fileName }}",
+        "dataPropertyName": "report"
+      },
+      "id": "ba46715a-dd6f-4d94-b53d-c290089ca711",
+      "name": "Write Escalation Report",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/hatch/workspace/automation-build-2/06-n8n-Task-Escalation-Flow/escalation-log.csv",
+        "dataPropertyName": "log"
+      },
+      "id": "34019cd4-d961-458b-9668-db042d50f7f1",
+      "name": "Write Escalation Log",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Escalation Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Escalation Log": {
+      "main": [
+        [
+          {
+            "node": "Extract Log CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Log CSV": {
+      "main": [
+        [
+          {
+            "node": "Read Tasks CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Tasks CSV": {
+      "main": [
+        [
+          {
+            "node": "Extract Tasks CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Tasks CSV": {
+      "main": [
+        [
+          {
+            "node": "Classify & Build Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify & Build Outputs": {
+      "main": [
+        [
+          {
+            "node": "Write Escalation Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Escalation Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Escalation Report": {
+      "main": [
+        [
+          {
+            "node": "Write Escalation Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

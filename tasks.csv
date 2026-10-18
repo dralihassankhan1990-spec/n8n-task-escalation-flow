@@ -1,0 +1,26 @@
+task_id,title,owner,status,due_date,blocks_milestone
+T-101,Finalize UAT test plan,Ayesha Khan,In Progress,2026-10-05,yes
+T-102,Vendor API credentials rotation,Usman Tariq,Not Started,2026-10-08,no
+T-103,Draft go-live checklist,Sana Malik,In Progress,2026-10-12,no
+T-104,Data migration dry run,Daniyal Raza,In Progress,2026-10-14,yes
+T-105,Update risk register,Hira Shahid,Not Started,2026-10-15,no
+T-106,Client demo rehearsal,Ayesha Khan,In Progress,2026-10-17,no
+T-107,Sign-off on training material,Usman Tariq,Not Started,2026-10-19,no
+T-108,Backup verification,Sana Malik,In Progress,2026-10-19,yes
+T-109,Sprint retrospective notes,Daniyal Raza,Not Started,2026-10-20,no
+T-110,Archive old project docs,Hira Shahid,Done,2026-10-10,no
+T-111,Procurement follow-up,Ayesha Khan,In Progress,2026-10-21,no
+T-112,Security patch review,Usman Tariq,Cancelled,2026-10-09,no
+T-113,Stakeholder update deck,Sana Malik,Not Started,2026-10-22,no
+T-114,Load testing,Daniyal Raza,In Progress,2026-10-25,no
+T-115,Contract renewal draft,Hira Shahid,Not Started,2026-10-01,no
+T-116,Team onboarding plan,Ayesha Khan,In Progress,2026-10-28,no
+T-117,Bug triage session,Usman Tariq,In Progress,2026-10-19,no
+T-118,Release notes v2.4,Sana Malik,Not Started,2026-10-11,no
+T-119,Database index optimization,Daniyal Raza,In Progress,2026-10-06,yes
+T-120,Office supply order,Hira Shahid,Not Started,2026-11-05,no
+T-121,Compliance audit prep,Ayesha Khan,In Progress,2026-10-20,no
+T-122,Mobile app beta feedback,Usman Tariq,Not Started,2026-10-13,no
+T-123,Knowledge base update,Sana Malik,In Progress,2026-10-24,no
+T-124,Disaster recovery drill,Daniyal Raza,Not Started,2026-10-19,yes
+T-125,Quarterly roadmap review,Hira Shahid,In Progress,2026-10-23,no
